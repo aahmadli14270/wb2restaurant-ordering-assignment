@@ -8,4 +8,6 @@ public interface KitchenStaffService {
     List<Order> getIncomingOrders();
     void markOrderInPreparation(Long orderId);
     void markOrderReady(Long orderId);
+    List<Order> getOrdersInPreparation();      // View all currently being prepared
+    List<Order> getReadyOrders();              // View all ready orders
 }

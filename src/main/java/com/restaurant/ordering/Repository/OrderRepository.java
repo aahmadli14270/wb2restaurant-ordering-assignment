@@ -24,4 +24,6 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     // Find orders that were created after a certain date
     List<Order> findByCreatedAtAfter(LocalDateTime createdAt);
+
+    List<Order> findByTableId(Long tableId);
 }
