@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @RestController
 @RequestMapping("/api/waiter")
@@ -18,13 +19,21 @@ public class WaiterController {
     // ✅ Get all orders that are ready to be delivered
     @GetMapping("/ready-orders")
     public ResponseEntity<List<Order>> getReadyOrders() {
+        List<Order> readyOrders = waiterService.getReadyOrders();
+        if (readyOrders.isEmpty()) {
+            throw new NoSuchElementException("There are no ready orders to deliver.");
+        }
         return ResponseEntity.ok(waiterService.getReadyOrders());
     }
 
     // ✅ Mark an order as delivered
     @PutMapping("/{orderId}/deliver")
     public ResponseEntity<String> markOrderDelivered(@PathVariable Long orderId) {
-        waiterService.markOrderDelivered(orderId);
-        return ResponseEntity.ok("Order marked as DELIVERED");
+        try {
+            waiterService.markOrderDelivered(orderId);
+            return ResponseEntity.ok("Order marked as DELIVERED");
+        } catch (NoSuchElementException e) {
+            throw new NoSuchElementException("Order with ID " + orderId + " not found.");
+        }
     }
 }

@@ -27,6 +27,8 @@ public class TableItem {
     @JoinColumn(name = "customer_id", referencedColumnName = "id")
     private Customer customer;
 
+    private byte[] qrCode;
+
     // One table can have multiple orders.
     @OneToMany(mappedBy = "table", cascade = CascadeType.ALL)
     private List<Order> orders;

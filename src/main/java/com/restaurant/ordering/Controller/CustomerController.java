@@ -11,6 +11,7 @@ import com.restaurant.ordering.Model.MenuItem;
 import com.restaurant.ordering.Service.OrderService;
 import com.restaurant.ordering.Service.MenuService;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @RestController
 @RequestMapping("/customer")
@@ -28,7 +29,7 @@ public class CustomerController {
     @PostMapping("/order/{tableId}")
     public ResponseEntity<?> placeOrder(@PathVariable Long tableId, @RequestBody Order order) {
         TableItem table = tableItemRepository.findById(tableId)
-                .orElseThrow(() -> new RuntimeException("Table not found with ID: " + tableId));
+                .orElseThrow(() -> new NoSuchElementException("Table not found with ID: " + tableId));
 
         order.setTable(table); // this sets the actual TableItem object
         Order savedOrder = orderService.createOrder(order);
@@ -38,13 +39,19 @@ public class CustomerController {
     // Simulated endpoint from QR code scan (tableId embedded)
     @GetMapping("/menu/{tableId}")
     public List<MenuItem> getMenu(@PathVariable String tableId) {
-        // Return menu for the customer at specific table
+        List<MenuItem> menuItems = menuService.getAllMenuItems();
+        if (menuItems.isEmpty()) {
+            throw new NoSuchElementException("Menu is currently unavailable.");
+        }
         return menuService.getAllMenuItems();
     }
 
-
     @PutMapping("/order/{orderId}/item")
     public Order updateOrderItem(@PathVariable Long orderId, @RequestBody Order updatedOrder) {
+        if (updatedOrder.getItems() == null || updatedOrder.getItems().isEmpty()) {
+            throw new IllegalArgumentException("Updated order must contain at least one item.");
+        }
+
         return orderService.updateOrderItems(orderId, updatedOrder);
     }
 

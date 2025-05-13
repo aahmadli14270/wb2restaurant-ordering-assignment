@@ -22,9 +22,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 
 public class JwtAuthorizationFilter extends OncePerRequestFilter {
+    private final JwtTokenProvider jwtTokenProvider;
     private final UserServiceImpl userService;
 
-    public JwtAuthorizationFilter(UserServiceImpl userService) {
+    public JwtAuthorizationFilter(JwtTokenProvider jwtTokenProvider, UserServiceImpl userService) {
+        this.jwtTokenProvider = jwtTokenProvider;
         this.userService = userService;
     }
 
