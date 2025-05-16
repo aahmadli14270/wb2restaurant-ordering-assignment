@@ -1,5 +1,6 @@
 package com.restaurant.ordering.Model.Users;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.restaurant.ordering.Model.Order;
 import com.restaurant.ordering.Model.TableItem;
 import jakarta.persistence.*;
@@ -22,10 +23,12 @@ public class Customer {
     private Long id;
 
     // Link to the Table that the Customer is associated with
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "table_id", referencedColumnName = "id")
     private TableItem table;  // This will map to the 'Table' entity
 
+    @JsonIgnore
     @OneToMany(mappedBy = "customer", cascade = CascadeType.ALL)
     private List<Order> orders = new ArrayList<>();
 }

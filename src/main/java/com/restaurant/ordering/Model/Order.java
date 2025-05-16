@@ -1,5 +1,6 @@
 package com.restaurant.ordering.Model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.restaurant.ordering.Enums.OrderStatus;
 import com.restaurant.ordering.Model.Users.Customer;
 import jakarta.persistence.*;
@@ -21,6 +22,7 @@ public class Order {
     private Long id;
 
     // Link to customer (who made the order)
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "customer_id")
     private Customer customer;
@@ -36,10 +38,12 @@ public class Order {
     private double total;
 
     // Items in the order
+    @JsonIgnore
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items;
 
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "table_id")
     private TableItem table;

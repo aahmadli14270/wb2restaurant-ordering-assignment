@@ -1,5 +1,6 @@
 package com.restaurant.ordering.Security;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -7,41 +8,71 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Map;
 
+public class JwtAuthenticationFilter extends UsernamePasswordAuthenticationFilter {
 
-public class JwtAuthenticationFilter extends OncePerRequestFilter {
+    private AuthenticationManager authenticationManager;
+    private JwtTokenProvider jwtTokenProvider;
 
-    private final AuthenticationManager authenticationManager;
+    // Default constructor for Spring
+    public JwtAuthenticationFilter() {
+        setFilterProcessesUrl("/auth/login"); // Set the authentication endpoint
+    }
 
-    public JwtAuthenticationFilter(AuthenticationManager authenticationManager) {
+    public JwtAuthenticationFilter(AuthenticationManager authenticationManager, JwtTokenProvider jwtTokenProvider) {
         this.authenticationManager = authenticationManager;
+        this.jwtTokenProvider = jwtTokenProvider;
+        setFilterProcessesUrl("/auth/login"); // Set the authentication endpoint
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-            throws ServletException, IOException {
+    public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response)
+            throws AuthenticationException {
+        try {
+            // Parse the login request body
+            Map<String, String> credentials = new ObjectMapper()
+                    .readValue(request.getInputStream(), Map.class);
 
-        if (request.getRequestURI().startsWith("/h2-console")) {
-            filterChain.doFilter(request, response);  // No authentication needed for H2 console
-            return;
+            String username = credentials.get("username");
+            String password = credentials.get("password");
+
+            UsernamePasswordAuthenticationToken authenticationToken =
+                    new UsernamePasswordAuthenticationToken(username, password);
+
+            return authenticationManager.authenticate(authenticationToken);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
-        String username = request.getParameter("username");
-        String password = request.getParameter("password");
-
-        // Validate username and password (authentication process)
-        Authentication authentication = new UsernamePasswordAuthenticationToken(username, password);
-        Authentication authResult = authenticationManager.authenticate(authentication);
-        SecurityContextHolder.getContext().setAuthentication(authResult);
-
-        filterChain.doFilter(request, response);
     }
 
+    @Override
+    protected void successfulAuthentication(HttpServletRequest request, HttpServletResponse response,
+                                            FilterChain chain, Authentication authResult) throws IOException, ServletException {
+        // Get the full role name including "ROLE_" prefix
+        String role = authResult.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .findFirst()
+                .orElse("ROLE_USER");
+
+        // Create token with the role exactly as it is (with "ROLE_" prefix)
+        String token = jwtTokenProvider.createToken(authResult.getName(), role);
+
+        response.addHeader("Authorization", "Bearer " + token);
+        response.setContentType("application/json");
+
+        Map<String, String> tokenMap = Map.of(
+                "token", token,
+                "username", authResult.getName(),
+                "role", role
+        );
+        new ObjectMapper().writeValue(response.getWriter(), tokenMap);
+    }
 }
+
+
