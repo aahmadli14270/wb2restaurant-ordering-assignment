@@ -17,7 +17,7 @@ import java.util.*;
 
 @Service
 @RequiredArgsConstructor
-public class UserServiceImpl implements UserDetailsService {
+public class UserServiceImpl implements UserDetailsService, UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -34,4 +34,29 @@ public class UserServiceImpl implements UserDetailsService {
         );
     }
 
+    @Override
+    public User register(User user) {
+        // Check if username already exists
+        if (userRepository.existsByUsername(user.getUsername())) {
+            throw new IllegalArgumentException("Username already exists");
+        }
+
+        // Encode the password
+        user.setPasswordHash(passwordEncoder.encode(user.getPasswordHash()));
+
+        // Save the user
+        return userRepository.save(user);
+    }
+
+    @Override
+    public User login(String username, String password) {
+        // This method is not needed as authentication is handled by Spring Security
+        // But we need to implement it to satisfy the interface
+        throw new UnsupportedOperationException("Login is handled by Spring Security");
+    }
+
+    @Override
+    public Optional<User> findById(Long id) {
+        return userRepository.findById(id);
+    }
 }

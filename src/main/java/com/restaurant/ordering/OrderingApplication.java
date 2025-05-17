@@ -6,7 +6,6 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 @SpringBootApplication
-
 @EnableJpaRepositories(basePackages = "com.restaurant.ordering.Repository")
 @EntityScan(basePackages = "com.restaurant.ordering.Model")
 public class OrderingApplication {

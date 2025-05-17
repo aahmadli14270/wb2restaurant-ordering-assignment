@@ -1,6 +1,10 @@
 package com.restaurant.ordering.Controller;
 
+import com.restaurant.ordering.Enums.UserRole;
+import com.restaurant.ordering.Model.Users.KitchenStaff;
+import com.restaurant.ordering.Model.Users.Manager;
 import com.restaurant.ordering.Model.Users.User;
+import com.restaurant.ordering.Model.Users.Waiter;
 import com.restaurant.ordering.ServiceImpl.UserServiceImpl;
 import com.restaurant.ordering.Security.JwtTokenProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,4 +43,47 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("token", token));
     }
 
+    @PostMapping("/register")
+    public ResponseEntity<?> register(@RequestBody Map<String, String> payload) {
+        String username = payload.get("username");
+        String password = payload.get("password");
+        String roleStr = payload.get("role");
+
+        if (username == null || password == null || roleStr == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Username, password, and role are required"));
+        }
+
+        try {
+            UserRole role = UserRole.valueOf(roleStr.toUpperCase());
+            User user;
+
+            // Create the appropriate user type based on the role
+            switch (role) {
+                case MANAGER:
+                    user = new Manager(username, password);
+                    break;
+                case WAITER:
+                    user = new Waiter(username, password);
+                    break;
+                case KITCHEN:
+                    user = new KitchenStaff(username, password);
+                    break;
+                default:
+                    return ResponseEntity.badRequest().body(Map.of("error", "Invalid role"));
+            }
+
+            // Register the user
+            User registeredUser = userService.register(user);
+
+            return ResponseEntity.ok(Map.of(
+                "message", "User registered successfully",
+                "username", registeredUser.getUsername(),
+                "role", registeredUser.getRole().name()
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", "An error occurred during registration"));
+        }
+    }
 }
