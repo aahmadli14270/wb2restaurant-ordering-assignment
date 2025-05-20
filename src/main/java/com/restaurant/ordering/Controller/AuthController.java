@@ -1,5 +1,6 @@
 package com.restaurant.ordering.Controller;
 
+import com.restaurant.ordering.DTO.LoginResponseDTO;
 import com.restaurant.ordering.Enums.UserRole;
 import com.restaurant.ordering.Model.Users.KitchenStaff;
 import com.restaurant.ordering.Model.Users.Manager;
@@ -30,7 +31,7 @@ public class AuthController {
     private JwtTokenProvider jwtTokenProvider;
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody Map<String, String> payload) {
+    public ResponseEntity<LoginResponseDTO> login(@RequestBody Map<String, String> payload) {
         String username = payload.get("username");
         String password = payload.get("password");
 
@@ -40,7 +41,9 @@ public class AuthController {
 
         String role = authentication.getAuthorities().iterator().next().getAuthority(); // get the single role
         String token = jwtTokenProvider.createToken(username, role);
-        return ResponseEntity.ok(Map.of("token", token));
+        
+        LoginResponseDTO response = new LoginResponseDTO(token, username, role);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/register")

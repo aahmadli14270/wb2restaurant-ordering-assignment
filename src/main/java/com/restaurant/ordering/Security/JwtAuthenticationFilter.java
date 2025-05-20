@@ -1,6 +1,7 @@
 package com.restaurant.ordering.Security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.restaurant.ordering.DTO.LoginResponseDTO;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -66,12 +67,8 @@ public class JwtAuthenticationFilter extends UsernamePasswordAuthenticationFilte
         response.addHeader("Authorization", "Bearer " + token);
         response.setContentType("application/json");
 
-        Map<String, String> tokenMap = Map.of(
-                "token", token,
-                "username", authResult.getName(),
-                "role", role
-        );
-        new ObjectMapper().writeValue(response.getWriter(), tokenMap);
+        LoginResponseDTO loginResponse = new LoginResponseDTO(token, authResult.getName(), role);
+        new ObjectMapper().writeValue(response.getWriter(), loginResponse);
     }
 }
 

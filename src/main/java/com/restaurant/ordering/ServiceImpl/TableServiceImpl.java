@@ -1,4 +1,4 @@
-package com.restaurant.ordering.Service.Impl;
+package com.restaurant.ordering.ServiceImpl;
 
 import com.restaurant.ordering.Model.TableItem;
 import com.restaurant.ordering.Repository.TableItemRepository;

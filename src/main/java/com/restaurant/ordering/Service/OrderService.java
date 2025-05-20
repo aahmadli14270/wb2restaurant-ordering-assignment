@@ -1,20 +1,24 @@
 package com.restaurant.ordering.Service;
 
-
+import com.restaurant.ordering.DTO.CreateOrderDTO;
+import com.restaurant.ordering.DTO.OrderDTO;
 import com.restaurant.ordering.Enums.OrderStatus;
-import com.restaurant.ordering.Model.Order;
-
 import java.util.List;
 
-
 public interface OrderService {
-    Order createOrder(Order order);
-    Order updateOrderItems(Long orderId, Order updatedOrder);
-    Order removeItemFromOrder(Long orderId, Long itemId);
+    // Create and update operations
+    OrderDTO createOrder(CreateOrderDTO orderDTO);
+    OrderDTO updateOrderStatus(Long orderId, OrderStatus status);
+    OrderDTO updateOrderItems(Long orderId, CreateOrderDTO updatedOrder);
+    OrderDTO removeItemFromOrder(Long orderId, Long itemId);
+    
+    // Get single order operations
+    OrderDTO getOrder(Long orderId);
+    OrderDTO getOrderByTable(Long tableId);
     OrderStatus getOrderStatus(Long orderId);
-    List<Order> getOrdersByStatus(OrderStatus status);
-    Order updateOrderStatus(Long orderId, OrderStatus status);
-    List<Order> getOrdersByTableId(Long tableId);
-    List<Order> getAllOrders();  // Get all orders
-    Order getOrderById(Long orderId);
+    
+    // Get multiple orders operations
+    List<OrderDTO> getOrdersByStatus(OrderStatus status);
+    List<OrderDTO> getOrdersByTableId(Long tableId);
+    List<OrderDTO> getAllOrders();
 }

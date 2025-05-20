@@ -65,9 +65,9 @@ public class SecurityConfig {
                                 "/tables/**",
                                 "/order/**"
                         ).permitAll()
-                        .requestMatchers("/api/kitchen/**").hasRole("KITCHEN")
-                        .requestMatchers("/api/waiter/**").hasRole("WAITER")
-                        .requestMatchers("/manager/menu/**").hasRole("MANAGER")
+                        .requestMatchers("/api/kitchen/**").hasAuthority("ROLE_KITCHEN")
+                        .requestMatchers("/api/waiter/**").hasAuthority("ROLE_WAITER")
+                        .requestMatchers("/manager/menu/**").hasAuthority("ROLE_MANAGER")
                         .anyRequest().authenticated()
                 )
                 // Configure headers for H2 console - allow frames for H2 console

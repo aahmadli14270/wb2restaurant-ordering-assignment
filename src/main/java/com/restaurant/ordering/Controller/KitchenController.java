@@ -1,10 +1,12 @@
 package com.restaurant.ordering.Controller;
 
-
-import com.restaurant.ordering.Model.Order;
+import com.restaurant.ordering.DTO.OrderDTO;
+import com.restaurant.ordering.Enums.OrderStatus;
 import com.restaurant.ordering.Service.KitchenStaffService;
+import com.restaurant.ordering.Service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -16,22 +18,23 @@ import java.util.NoSuchElementException;
 public class KitchenController {
 
     private final KitchenStaffService kitchenStaffService;
+    private final OrderService orderService;
 
-    // ✅ Get all incoming orders (status = CREATED)
     @GetMapping("/incoming")
-    public ResponseEntity<List<Order>> getIncomingOrders() {
-        List<Order> orders = kitchenStaffService.getIncomingOrders();
+    @PreAuthorize("hasRole('KITCHEN')")
+    public ResponseEntity<List<OrderDTO>> getIncomingOrders() {
+        List<OrderDTO> orders = orderService.getOrdersByStatus(OrderStatus.CREATED);
         if (orders.isEmpty()) {
             throw new NoSuchElementException("No incoming orders found.");
         }
-        return ResponseEntity.ok(kitchenStaffService.getIncomingOrders());
+        return ResponseEntity.ok(orders);
     }
 
-    // ✅ Mark an order as "IN_PREPARATION"
     @PutMapping("/{orderId}/prepare")
+    @PreAuthorize("hasRole('KITCHEN')")
     public ResponseEntity<String> markInPreparation(@PathVariable Long orderId) {
         try {
-            kitchenStaffService.markOrderInPreparation(orderId);
+            orderService.updateOrderStatus(orderId, OrderStatus.IN_PREPARATION);
             return ResponseEntity.ok("Order marked as IN_PREPARATION");
         } catch (NoSuchElementException e) {
             throw new NoSuchElementException("Order with ID " + orderId + " not found.");
@@ -42,9 +45,10 @@ public class KitchenController {
 
     // ✅ Mark an order as "READY"
     @PutMapping("/{orderId}/ready")
+    @PreAuthorize("hasRole('KITCHEN')")
     public ResponseEntity<String> markReady(@PathVariable Long orderId) {
         try {
-            kitchenStaffService.markOrderReady(orderId);
+            orderService.updateOrderStatus(orderId, OrderStatus.READY);
             return ResponseEntity.ok("Order marked as READY");
         } catch (NoSuchElementException e) {
             throw new NoSuchElementException("Order with ID " + orderId + " not found.");
@@ -55,21 +59,23 @@ public class KitchenController {
 
     // ✅ Get all orders that are currently being prepared
     @GetMapping("/preparing")
-    public ResponseEntity<List<Order>> getOrdersInPreparation() {
-        List<Order> preparingOrders = kitchenStaffService.getOrdersInPreparation();
+    @PreAuthorize("hasRole('KITCHEN')")
+    public ResponseEntity<List<OrderDTO>> getOrdersInPreparation() {
+        List<OrderDTO> preparingOrders = orderService.getOrdersByStatus(OrderStatus.IN_PREPARATION);
         if (preparingOrders.isEmpty()) {
             throw new NoSuchElementException("No orders currently in preparation.");
         }
-        return ResponseEntity.ok(kitchenStaffService.getOrdersInPreparation());
+        return ResponseEntity.ok(preparingOrders);
     }
 
     // ✅ Get all orders that are ready
     @GetMapping("/ready")
-    public ResponseEntity<List<Order>> getReadyOrders() {
-        List<Order> readyOrders = kitchenStaffService.getReadyOrders();
+    @PreAuthorize("hasRole('KITCHEN')")
+    public ResponseEntity<List<OrderDTO>> getReadyOrders() {
+        List<OrderDTO> readyOrders = orderService.getOrdersByStatus(OrderStatus.READY);
         if (readyOrders.isEmpty()) {
             throw new NoSuchElementException("No orders are currently ready.");
         }
-        return ResponseEntity.ok(kitchenStaffService.getReadyOrders());
+        return ResponseEntity.ok(readyOrders);
     }
 }

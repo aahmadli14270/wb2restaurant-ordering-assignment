@@ -1,101 +1,253 @@
 package com.restaurant.ordering.ServiceImpl;
 
+import com.restaurant.ordering.DTO.CreateOrderDTO;
+import com.restaurant.ordering.DTO.OrderDTO;
 import com.restaurant.ordering.Enums.OrderStatus;
-import com.restaurant.ordering.Model.Order;
-import com.restaurant.ordering.Model.OrderItem;
-import com.restaurant.ordering.Repository.OrderRepository;
-import com.restaurant.ordering.Repository.TableItemRepository;
+import com.restaurant.ordering.Model.*;
+import com.restaurant.ordering.Repository.*;
 import com.restaurant.ordering.Service.OrderService;
-
-import org.springframework.beans.factory.annotation.Autowired;
+import com.restaurant.ordering.Service.RedisOrderService;
+import com.restaurant.ordering.Service.OrderMessageProducer;
 import org.springframework.stereotype.Service;
-
+import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
-import java.util.Iterator;
-import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.function.Function;
 
 @Service
 public class OrderServiceImpl implements OrderService {
-
-
-    @Autowired
-    private OrderRepository orderRepository;
-
-    @Autowired
-    private TableItemRepository tableItemRepository;
-
-    // Create a new order
-    @Override
-    public Order createOrder(Order order) {
-        return orderRepository.save(order);
+    
+    private final OrderRepository orderRepository;
+    private final TableItemRepository tableItemRepository;
+    private final MenuItemRepository menuItemRepository;
+    private final OrderItemRepository orderItemRepository;
+    private final OrderMessageProducer orderMessageProducer;
+    private final RedisOrderService redisOrderService;
+    
+    public OrderServiceImpl(
+            OrderRepository orderRepository,
+            TableItemRepository tableItemRepository,
+            MenuItemRepository menuItemRepository,
+            OrderItemRepository orderItemRepository,
+            OrderMessageProducer orderMessageProducer,
+            RedisOrderService redisOrderService) {
+        this.orderRepository = orderRepository;
+        this.tableItemRepository = tableItemRepository;
+        this.menuItemRepository = menuItemRepository;
+        this.orderItemRepository = orderItemRepository;
+        this.orderMessageProducer = orderMessageProducer;
+        this.redisOrderService = redisOrderService;
     }
-
-    // Update order items (e.g., add/remove items)
+    
     @Override
-    public Order updateOrderItems(Long orderId, Order updatedOrder) {
-        Optional<Order> orderOptional = orderRepository.findById(orderId);
-        if (orderOptional.isPresent()) {
-            Order order = orderOptional.get();
-            order.setItems(updatedOrder.getItems());
-            order.setTotal(updatedOrder.getTotal());
-            return orderRepository.save(order);
-        }
-        throw new RuntimeException("Order not found");
+    @Transactional
+    public OrderDTO createOrder(CreateOrderDTO orderDTO) {
+        TableItem table = tableItemRepository.findByTableId(orderDTO.getTableId())
+            .orElseThrow(() -> new RuntimeException("Table not found"));
+            
+        Order order = new Order();
+        order.setTable(table);
+        order.setStatus(OrderStatus.CREATED);
+        
+        Order savedOrder = orderRepository.save(order);
+        
+        List<OrderItem> orderItems = orderDTO.getItems().stream()
+            .map(itemDTO -> {
+                MenuItem menuItem = menuItemRepository.findById(itemDTO.getMenuItemId())
+                    .orElseThrow(() -> new RuntimeException("MenuItem not found"));
+                    
+                OrderItem orderItem = new OrderItem();
+                orderItem.setOrder(savedOrder);
+                orderItem.setMenuItem(menuItem);
+                orderItem.setQuantity(itemDTO.getQuantity());
+                return orderItem;
+            })
+            .collect(Collectors.toList());
+            
+        orderItemRepository.saveAll(orderItems);
+        savedOrder.setItems(orderItems);
+        
+        // Calculate and set total
+        double total = orderItems.stream()
+            .mapToDouble(item -> item.getMenuItem().getPrice() * item.getQuantity())
+            .sum();
+        savedOrder.setTotal(total);
+        orderRepository.save(savedOrder);
+        
+        // Cache the order status and session
+        redisOrderService.saveOrderStatus(savedOrder.getId(), savedOrder.getStatus());
+        redisOrderService.saveOrderSession(table.getId(), savedOrder.getId());
+        
+        // Send order to message queue for kitchen processing
+        orderMessageProducer.sendOrder(savedOrder);
+        
+        return convertToDTO(savedOrder);
     }
-
-    // Remove an item from the order
+    
     @Override
-    public Order removeItemFromOrder(Long orderId, Long itemId) {
-        Optional<Order> orderOptional = orderRepository.findById(orderId);
-        if (orderOptional.isPresent()) {
-            Order order = orderOptional.get();
-            order.getItems().removeIf(item -> item.getId().equals(itemId));
-            return orderRepository.save(order);
-        }
-        throw new RuntimeException("Order not found");
+    @Transactional
+    public OrderDTO updateOrderStatus(Long orderId, OrderStatus status) {
+        Order order = orderRepository.findById(orderId)
+            .orElseThrow(() -> new RuntimeException("Order not found"));
+            
+        order.setStatus(status);
+        Order savedOrder = orderRepository.save(order);
+        
+        // Update cached status
+        redisOrderService.saveOrderStatus(savedOrder.getId(), savedOrder.getStatus());
+        
+        // Send status update to message queue
+        orderMessageProducer.sendOrder(savedOrder);
+        
+        return convertToDTO(savedOrder);
     }
-
-    // Get order status by order ID
+    
     @Override
+    @Transactional
+    public OrderDTO updateOrderItems(Long orderId, CreateOrderDTO updatedOrder) {
+        Order order = orderRepository.findById(orderId)
+            .orElseThrow(() -> new RuntimeException("Order not found"));
+            
+        // Remove existing items
+        orderItemRepository.deleteAll(order.getItems());
+        
+        // Add new items
+        List<OrderItem> orderItems = updatedOrder.getItems().stream()
+            .map(itemDTO -> {
+                MenuItem menuItem = menuItemRepository.findById(itemDTO.getMenuItemId())
+                    .orElseThrow(() -> new RuntimeException("MenuItem not found"));
+                    
+                OrderItem orderItem = new OrderItem();
+                orderItem.setOrder(order);
+                orderItem.setMenuItem(menuItem);
+                orderItem.setQuantity(itemDTO.getQuantity());
+                return orderItem;
+            })
+            .collect(Collectors.toList());
+            
+        orderItemRepository.saveAll(orderItems);
+        order.setItems(orderItems);
+        
+        Order savedOrder = orderRepository.save(order);
+        
+        // Update cached status
+        redisOrderService.saveOrderStatus(savedOrder.getId(), savedOrder.getStatus());
+        
+        // Send update to message queue
+        orderMessageProducer.sendOrder(savedOrder);
+        
+        return convertToDTO(savedOrder);
+    }
+    
+    @Override
+    @Transactional
+    public OrderDTO removeItemFromOrder(Long orderId, Long itemId) {
+        Order order = orderRepository.findById(orderId)
+            .orElseThrow(() -> new RuntimeException("Order not found"));
+            
+        OrderItem itemToRemove = order.getItems().stream()
+            .filter(item -> item.getId().equals(itemId))
+            .findFirst()
+            .orElseThrow(() -> new RuntimeException("Order item not found"));
+            
+        order.getItems().remove(itemToRemove);
+        orderItemRepository.delete(itemToRemove);
+        
+        Order savedOrder = orderRepository.save(order);
+        
+        // Update cached status
+        redisOrderService.saveOrderStatus(savedOrder.getId(), savedOrder.getStatus());
+        
+        // Send update to message queue
+        orderMessageProducer.sendOrder(savedOrder);
+        
+        return convertToDTO(savedOrder);
+    }
+    
+    @Override
+    @Transactional(readOnly = true)
+    public OrderDTO getOrder(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+            .orElseThrow(() -> new RuntimeException("Order not found"));
+        return convertToDTO(order);
+    }
+    
+    @Override
+    @Transactional(readOnly = true)
+    public OrderDTO getOrderByTable(Long tableId) {
+        List<Order> orders = orderRepository.findByTableId(tableId);
+        Order activeOrder = orders.stream()
+            .filter(order -> order.getStatus() != OrderStatus.DELIVERED)
+            .findFirst()
+            .orElseThrow(() -> new RuntimeException("No active order found for table"));
+        return convertToDTO(activeOrder);
+    }
+    
+    @Override
+    @Transactional(readOnly = true)
     public OrderStatus getOrderStatus(Long orderId) {
-        Optional<Order> orderOptional = orderRepository.findById(orderId);
-        if (orderOptional.isPresent()) {
-            return orderOptional.get().getStatus();
+        // Try to get status from Redis first
+        OrderStatus cachedStatus = redisOrderService.getOrderStatus(orderId);
+        if (cachedStatus != null) {
+            return cachedStatus;
         }
-        throw new RuntimeException("Order not found");
+        
+        // If not in Redis, get from database and cache it
+        Order order = orderRepository.findById(orderId)
+            .orElseThrow(() -> new RuntimeException("Order not found"));
+            
+        redisOrderService.saveOrderStatus(orderId, order.getStatus());
+        return order.getStatus();
     }
-
-    // Get orders by status (e.g., CREATED, IN_PREPARATION, etc.)
+    
     @Override
-    public List<Order> getOrdersByStatus(OrderStatus status) {
-        return orderRepository.findByStatus(status);
+    @Transactional(readOnly = true)
+    public List<OrderDTO> getOrdersByStatus(OrderStatus status) {
+        return orderRepository.findByStatus(status).stream()
+            .<OrderDTO>map(this::convertToDTO)
+            .collect(Collectors.toList());
     }
-
-    // Update the status of an order (e.g., from CREATED to IN_PREPARATION)
+    
     @Override
-    public Order updateOrderStatus(Long orderId, OrderStatus status) {
-        Optional<Order> orderOptional = orderRepository.findById(orderId);
-        if (orderOptional.isPresent()) {
-            Order order = orderOptional.get();
-            order.setStatus(status);
-            return orderRepository.save(order);
-        }
-        throw new RuntimeException("Order not found");
+    @Transactional(readOnly = true)
+    public List<OrderDTO> getOrdersByTableId(Long tableId) {
+        return orderRepository.findByTableId(tableId).stream()
+            .<OrderDTO>map(this::convertToDTO)
+            .collect(Collectors.toList());
     }
-
-    // Get orders by table ID
+    
     @Override
-    public List<Order> getOrdersByTableId(Long tableId) {
-        return orderRepository.findByTableId(tableId);
+    @Transactional(readOnly = true)
+    public List<OrderDTO> getAllOrders() {
+        return orderRepository.findAll().stream()
+            .<OrderDTO>map(this::convertToDTO)
+            .collect(Collectors.toList());
     }
-
-    @Override
-    public List<Order> getAllOrders() {
-        return orderRepository.findAll();  // Retrieve all orders
+    
+    private OrderDTO convertToDTO(Order order) {
+        OrderDTO dto = new OrderDTO();
+        dto.setId(order.getId());
+        dto.setTableId(order.getTable().getTableId());
+        dto.setStatus(order.getStatus());
+        dto.setCreatedAt(order.getCreatedAt());
+        
+        // Calculate total from items
+        double total = order.getItems().stream()
+            .mapToDouble(item -> item.getMenuItem().getPrice() * item.getQuantity())
+            .sum();
+        dto.setTotalAmount(total);
+        
+        dto.setItems(order.getItems().stream()
+            .map(item -> {
+                OrderDTO.OrderItemDTO itemDTO = new OrderDTO.OrderItemDTO();
+                itemDTO.setMenuItemId(item.getMenuItem().getId());
+                itemDTO.setItemName(item.getMenuItem().getName());
+                itemDTO.setQuantity(item.getQuantity());
+                itemDTO.setPrice(item.getMenuItem().getPrice());
+                return itemDTO;
+            })
+            .collect(Collectors.toList()));
+            
+        return dto;
     }
-
-    @Override
-    public Order getOrderById(Long orderId) {
-        return orderRepository.findById(orderId).orElseThrow(() -> new RuntimeException("Order not found"));
-    }
-}
+} 

@@ -1,9 +1,11 @@
 package com.restaurant.ordering.Security;
 
+import com.restaurant.ordering.Service.RedisTokenService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -25,17 +27,27 @@ public class JwtTokenProvider {
     private final SecretKey secretKey = Keys.secretKeyFor(SignatureAlgorithm.HS512);
     private final long validityInMilliseconds = 1000 * 60 * 60 * 10; // 10 hours
 
+    @Autowired
+    private RedisTokenService redisTokenService;
+
     public String createToken(String username, String role) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + validityInMilliseconds);
 
-        return Jwts.builder()
+        // Ensure role has ROLE_ prefix
+        String roleWithPrefix = role.startsWith("ROLE_") ? role : "ROLE_" + role;
+
+        String token = Jwts.builder()
                 .setSubject(username)
-                .claim("role", role) // custom claim for user role
+                .claim("role", roleWithPrefix) // custom claim for user role
                 .setIssuedAt(now)
                 .setExpiration(expiryDate)
                 .signWith(secretKey, SignatureAlgorithm.HS512)
                 .compact();
+        
+        // Whitelist the token in Redis
+        redisTokenService.whitelistToken(token);
+        return token;
     }
 
     public String getUsernameFromToken(String token) {
@@ -66,7 +78,10 @@ public class JwtTokenProvider {
 
     public boolean validateToken(String token, UserDetails userDetails) {
         final String username = getUsernameFromToken(token);
-        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+        return (username.equals(userDetails.getUsername()) && 
+                !isTokenExpired(token) && 
+                redisTokenService.isTokenWhitelisted(token) && 
+                !redisTokenService.isTokenBlacklisted(token));
     }
 
     public boolean validateToken(String token) {
@@ -75,10 +90,15 @@ public class JwtTokenProvider {
                 .setSigningKey(secretKey)
                 .build()
                 .parseClaimsJws(token);
-            return true;
+            return redisTokenService.isTokenWhitelisted(token) && 
+                   !redisTokenService.isTokenBlacklisted(token);
         } catch (Exception e) {
             return false;
         }
+    }
+
+    public void invalidateToken(String token) {
+        redisTokenService.blacklistToken(token);
     }
 
     private boolean isTokenExpired(String token) {

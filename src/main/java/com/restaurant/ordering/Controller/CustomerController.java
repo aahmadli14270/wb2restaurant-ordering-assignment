@@ -1,5 +1,7 @@
 package com.restaurant.ordering.Controller;
 
+import com.restaurant.ordering.DTO.CreateOrderDTO;
+import com.restaurant.ordering.DTO.OrderDTO;
 import com.restaurant.ordering.Enums.OrderStatus;
 import com.restaurant.ordering.Model.Order;
 import com.restaurant.ordering.Model.TableItem;
@@ -26,14 +28,9 @@ public class CustomerController {
     @Autowired
     private TableItemRepository tableItemRepository;
 
-    @PostMapping("/order/{tableId}")
-    public ResponseEntity<?> placeOrder(@PathVariable Long tableId, @RequestBody Order order) {
-        TableItem table = tableItemRepository.findById(tableId)
-                .orElseThrow(() -> new NoSuchElementException("Table not found with ID: " + tableId));
-
-        order.setTable(table); // this sets the actual TableItem object
-        Order savedOrder = orderService.createOrder(order);
-        return ResponseEntity.ok(savedOrder);
+    @PostMapping("/order")
+    public OrderDTO createOrder(@RequestBody CreateOrderDTO order) {
+        return orderService.createOrder(order);
     }
 
     // Simulated endpoint from QR code scan (tableId embedded)
@@ -47,7 +44,7 @@ public class CustomerController {
     }
 
     @PutMapping("/order/{orderId}/item")
-    public Order updateOrderItem(@PathVariable Long orderId, @RequestBody Order updatedOrder) {
+    public OrderDTO updateOrderItem(@PathVariable Long orderId, @RequestBody CreateOrderDTO updatedOrder) {
         if (updatedOrder.getItems() == null || updatedOrder.getItems().isEmpty()) {
             throw new IllegalArgumentException("Updated order must contain at least one item.");
         }
@@ -56,7 +53,7 @@ public class CustomerController {
     }
 
     @DeleteMapping("/order/{orderId}/item/{itemId}")
-    public Order removeOrderItem(@PathVariable Long orderId, @PathVariable Long itemId) {
+    public OrderDTO removeOrderItem(@PathVariable Long orderId, @PathVariable Long itemId) {
         return orderService.removeItemFromOrder(orderId, itemId);
     }
 
