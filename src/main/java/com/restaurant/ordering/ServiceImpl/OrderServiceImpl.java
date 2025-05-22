@@ -7,16 +7,14 @@ import com.restaurant.ordering.Model.*;
 import com.restaurant.ordering.Repository.*;
 import com.restaurant.ordering.Service.OrderService;
 import com.restaurant.ordering.Service.RedisOrderService;
-import com.restaurant.ordering.Service.OrderMessageProducer;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.stream.Collectors;
-import java.util.function.Function;
 
 @Service
 public class OrderServiceImpl implements OrderService {
-    
+
     private final OrderRepository orderRepository;
     private final TableItemRepository tableItemRepository;
     private final MenuItemRepository menuItemRepository;
@@ -73,7 +71,7 @@ public class OrderServiceImpl implements OrderService {
             .sum();
         savedOrder.setTotal(total);
         orderRepository.save(savedOrder);
-        
+
         // Cache the order status and session
         redisOrderService.saveOrderStatus(savedOrder.getId(), savedOrder.getStatus());
         redisOrderService.saveOrderSession(table.getId(), savedOrder.getId());
@@ -207,7 +205,7 @@ public class OrderServiceImpl implements OrderService {
             .<OrderDTO>map(this::convertToDTO)
             .collect(Collectors.toList());
     }
-    
+
     @Override
     @Transactional(readOnly = true)
     public List<OrderDTO> getOrdersByTableId(Long tableId) {
@@ -215,7 +213,7 @@ public class OrderServiceImpl implements OrderService {
             .<OrderDTO>map(this::convertToDTO)
             .collect(Collectors.toList());
     }
-    
+
     @Override
     @Transactional(readOnly = true)
     public List<OrderDTO> getAllOrders() {
@@ -250,4 +248,4 @@ public class OrderServiceImpl implements OrderService {
             
         return dto;
     }
-} 
+}

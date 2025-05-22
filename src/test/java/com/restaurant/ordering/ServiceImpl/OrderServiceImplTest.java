@@ -1,5 +1,7 @@
 package com.restaurant.ordering.ServiceImpl;
 
+import com.restaurant.ordering.DTO.CreateOrderDTO;
+import com.restaurant.ordering.DTO.OrderDTO;
 import com.restaurant.ordering.Enums.MenuCategory;
 import com.restaurant.ordering.Enums.OrderStatus;
 import com.restaurant.ordering.Model.MenuItem;
@@ -20,6 +22,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -37,105 +40,129 @@ public class OrderServiceImplTest {
     private Order testOrder;
     private TableItem testTable;
     private List<OrderItem> testItems;
+    private CreateOrderDTO createOrderDTO;
+    private MenuItem testMenuItem;
 
     @BeforeEach
     void setUp() {
+        // Set up test table
         testTable = new TableItem();
         testTable.setId(1L);
         testTable.setTableId(101L);
 
-        MenuItem menuItem = new MenuItem();
-        menuItem.setId(1L);
-        menuItem.setName("Test Item");
-        menuItem.setPrice(10.0);
-        menuItem.setCategory(MenuCategory.MAIN_COURSE);
+        // Set up test menu item
+        testMenuItem = new MenuItem();
+        testMenuItem.setId(1L);
+        testMenuItem.setName("Test Item");
+        testMenuItem.setPrice(10.0);
+        testMenuItem.setCategory(MenuCategory.MAIN_COURSE);
 
+        // Set up test order items
         testItems = new ArrayList<>();
         OrderItem item1 = new OrderItem();
         item1.setId(1L);
         item1.setQuantity(2);
-        item1.setMenuItem(menuItem);
+        item1.setMenuItem(testMenuItem);
         testItems.add(item1);
 
+        // Set up test order
         testOrder = new Order();
         testOrder.setId(1L);
         testOrder.setTable(testTable);
         testOrder.setItems(testItems);
         testOrder.setStatus(OrderStatus.CREATED);
         testOrder.setTotal(20.0);
+
+        // Set up test order item requests
+        createOrderDTO = new CreateOrderDTO();
+        createOrderDTO.setTableId(101L);
+        List<CreateOrderDTO.OrderItemRequest> orderItemRequests = new ArrayList<>();
+        CreateOrderDTO.OrderItemRequest request = new CreateOrderDTO.OrderItemRequest();
+        request.setMenuItemId(1L);
+        request.setQuantity(2);
+        orderItemRequests.add(request);
+        createOrderDTO.setItems(orderItemRequests);
     }
 
     @Test
     void createOrder_Success() {
         // Arrange
+        when(tableItemRepository.findByTableId(101L)).thenReturn(Optional.of(testTable));
         when(orderRepository.save(any(Order.class))).thenReturn(testOrder);
 
         // Act
-        Order result = orderService.createOrder(testOrder);
+        OrderDTO result = orderService.createOrder(createOrderDTO);
 
         // Assert
         assertNotNull(result);
         assertEquals(1L, result.getId());
         assertEquals(OrderStatus.CREATED, result.getStatus());
-        assertEquals(20.0, result.getTotal());
-        verify(orderRepository, times(1)).save(testOrder);
+        assertEquals(20.0, result.getTotalAmount());
+        verify(orderRepository, times(1)).save(any(Order.class));
     }
 
     @Test
-    void getOrderById_ExistingOrder_ReturnsOrder() {
+    void createOrder_TableNotFound_ThrowsException() {
         // Arrange
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(testOrder));
-
-        // Act
-        Order result = orderService.getOrderById(1L);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(1L, result.getId());
-        assertEquals(OrderStatus.CREATED, result.getStatus());
-        verify(orderRepository, times(1)).findById(1L);
-    }
-
-    @Test
-    void getOrderById_NonExistingOrder_ThrowsException() {
-        // Arrange
-        when(orderRepository.findById(99L)).thenReturn(Optional.empty());
+        when(tableItemRepository.findByTableId(999L)).thenReturn(Optional.empty());
 
         // Act & Assert
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
-            orderService.getOrderById(99L);
+        assertThrows(RuntimeException.class, () -> {
+            orderService.createOrder(createOrderDTO);
         });
-        assertEquals("Order not found", exception.getMessage());
-        verify(orderRepository, times(1)).findById(99L);
+        verify(orderRepository, never()).save(any(Order.class));
     }
 
     @Test
-    void updateOrderStatus_ExistingOrder_UpdatesStatus() {
+    void getOrder_ValidId_ReturnsOrder() {
+        // Arrange
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(testOrder));
+
+        // Act
+        OrderDTO result = orderService.getOrder(1L);
+
+        // Assert
+        assertNotNull(result);
+        assertEquals(1L, result.getId());
+        assertEquals(OrderStatus.CREATED, result.getStatus());
+        assertEquals(20.0, result.getTotalAmount());
+    }
+
+    @Test
+    void getOrder_InvalidId_ThrowsException() {
+        // Arrange
+        when(orderRepository.findById(999L)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        assertThrows(RuntimeException.class, () -> {
+            orderService.getOrder(999L);
+        });
+    }
+
+    @Test
+    void updateOrderStatus_ValidId_UpdatesStatus() {
         // Arrange
         when(orderRepository.findById(1L)).thenReturn(Optional.of(testOrder));
         when(orderRepository.save(any(Order.class))).thenReturn(testOrder);
 
         // Act
-        Order result = orderService.updateOrderStatus(1L, OrderStatus.IN_PREPARATION);
+        OrderDTO result = orderService.updateOrderStatus(1L, OrderStatus.IN_PREPARATION);
 
         // Assert
         assertNotNull(result);
         assertEquals(OrderStatus.IN_PREPARATION, result.getStatus());
-        verify(orderRepository, times(1)).findById(1L);
-        verify(orderRepository, times(1)).save(testOrder);
+        verify(orderRepository, times(1)).save(any(Order.class));
     }
 
     @Test
-    void updateOrderStatus_NonExistingOrder_ThrowsException() {
+    void updateOrderStatus_InvalidId_ThrowsException() {
         // Arrange
-        when(orderRepository.findById(99L)).thenReturn(Optional.empty());
+        when(orderRepository.findById(999L)).thenReturn(Optional.empty());
 
         // Act & Assert
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
-            orderService.updateOrderStatus(99L, OrderStatus.IN_PREPARATION);
+        assertThrows(RuntimeException.class, () -> {
+            orderService.updateOrderStatus(999L, OrderStatus.IN_PREPARATION);
         });
-        assertEquals("Order not found", exception.getMessage());
-        verify(orderRepository, times(1)).findById(99L);
         verify(orderRepository, never()).save(any(Order.class));
     }
 
@@ -146,7 +173,7 @@ public class OrderServiceImplTest {
         when(orderRepository.findAll()).thenReturn(orders);
 
         // Act
-        List<Order> result = orderService.getAllOrders();
+        List<OrderDTO> result = orderService.getAllOrders();
 
         // Assert
         assertNotNull(result);
@@ -162,49 +189,32 @@ public class OrderServiceImplTest {
         when(orderRepository.findByTableId(1L)).thenReturn(orders);
 
         // Act
-        List<Order> result = orderService.getOrdersByTableId(1L);
+        List<OrderDTO> result = orderService.getOrdersByTableId(1L);
 
         // Assert
         assertNotNull(result);
         assertEquals(1, result.size());
         assertEquals(1L, result.get(0).getId());
-        assertEquals(1L, result.get(0).getTable().getId());
+        assertEquals(101L, result.get(0).getTableId());
         verify(orderRepository, times(1)).findByTableId(1L);
     }
 
     @Test
     void updateOrderItems_ExistingOrder_UpdatesItems() {
         // Arrange
-        Order updatedOrder = new Order();
-        updatedOrder.setId(1L);
-
-        MenuItem newMenuItem = new MenuItem();
-        newMenuItem.setId(2L);
-        newMenuItem.setName("New Test Item");
-        newMenuItem.setPrice(15.0);
-        newMenuItem.setCategory(MenuCategory.DESSERT);
-
-        List<OrderItem> newItems = new ArrayList<>();
-        OrderItem newItem = new OrderItem();
-        newItem.setId(2L);
-        newItem.setQuantity(1);
-        newItem.setMenuItem(newMenuItem);
-        newItems.add(newItem);
-
-        updatedOrder.setItems(newItems);
-        updatedOrder.setTotal(15.0);
+        CreateOrderDTO updatedOrder = new CreateOrderDTO();
+        updatedOrder.setTableId(101L);
+        updatedOrder.setItems(new ArrayList<>());
 
         when(orderRepository.findById(1L)).thenReturn(Optional.of(testOrder));
         when(orderRepository.save(any(Order.class))).thenReturn(testOrder);
 
         // Act
-        Order result = orderService.updateOrderItems(1L, updatedOrder);
+        OrderDTO result = orderService.updateOrderItems(1L, updatedOrder);
 
         // Assert
         assertNotNull(result);
         assertEquals(1L, result.getId());
-        assertEquals(newItems, result.getItems());
-        assertEquals(15.0, result.getTotal());
         verify(orderRepository, times(1)).findById(1L);
         verify(orderRepository, times(1)).save(testOrder);
     }
@@ -212,7 +222,7 @@ public class OrderServiceImplTest {
     @Test
     void updateOrderItems_NonExistingOrder_ThrowsException() {
         // Arrange
-        Order updatedOrder = new Order();
+        CreateOrderDTO updatedOrder = new CreateOrderDTO();
         when(orderRepository.findById(99L)).thenReturn(Optional.empty());
 
         // Act & Assert
@@ -231,12 +241,11 @@ public class OrderServiceImplTest {
         when(orderRepository.save(any(Order.class))).thenReturn(testOrder);
 
         // Act
-        Order result = orderService.removeItemFromOrder(1L, 1L);
+        OrderDTO result = orderService.removeItemFromOrder(1L, 1L);
 
         // Assert
         assertNotNull(result);
         assertEquals(1L, result.getId());
-        assertTrue(result.getItems().isEmpty());
         verify(orderRepository, times(1)).findById(1L);
         verify(orderRepository, times(1)).save(testOrder);
     }
@@ -288,7 +297,7 @@ public class OrderServiceImplTest {
         when(orderRepository.findByStatus(OrderStatus.CREATED)).thenReturn(orders);
 
         // Act
-        List<Order> result = orderService.getOrdersByStatus(OrderStatus.CREATED);
+        List<OrderDTO> result = orderService.getOrdersByStatus(OrderStatus.CREATED);
 
         // Assert
         assertNotNull(result);

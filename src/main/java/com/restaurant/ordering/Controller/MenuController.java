@@ -2,8 +2,9 @@ package com.restaurant.ordering.Controller;
 
 import com.restaurant.ordering.Model.MenuItem;
 import com.restaurant.ordering.Service.MenuService;
-
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,37 +18,38 @@ public class MenuController {
     private MenuService menuService;
 
     @GetMapping
-    public List<MenuItem> getAllItems() {
+    public ResponseEntity<List<MenuItem>> getAllItems() {
         List<MenuItem> items = menuService.getAllMenuItems();
         if (items.isEmpty()) {
-            throw new NoSuchElementException("No menu items found.");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
-        return items;
+        return ResponseEntity.ok(items);
     }
 
     @PostMapping
-    public MenuItem addMenuItem(@RequestBody MenuItem item) {
+    public ResponseEntity<MenuItem> addMenuItem(@RequestBody MenuItem item) {
         if (item.getName() == null) {
-            throw new IllegalArgumentException("Menu item name must not be null.");
+            return ResponseEntity.badRequest().build();
         }
-        return menuService.addMenuItem(item);
+        return ResponseEntity.ok(menuService.addMenuItem(item));
     }
 
     @PutMapping("/{id}")
-    public MenuItem updateItem(@PathVariable Long id, @RequestBody MenuItem item) {
+    public ResponseEntity<MenuItem> updateItem(@PathVariable Long id, @RequestBody MenuItem item) {
         try {
-            return menuService.updateMenuItem(id, item);
+            return ResponseEntity.ok(menuService.updateMenuItem(id, item));
         } catch (NoSuchElementException e) {
-            throw new NoSuchElementException("Menu item with ID " + id + " not found.");
+            return ResponseEntity.notFound().build();
         }
     }
 
     @DeleteMapping("/{id}")
-    public void deleteItem(@PathVariable Long id) {
+    public ResponseEntity<Void> deleteItem(@PathVariable Long id) {
         try {
             menuService.deleteMenuItem(id);
+            return ResponseEntity.ok().build();
         } catch (NoSuchElementException e) {
-            throw new NoSuchElementException("Menu item with ID " + id + " not found.");
+            return ResponseEntity.notFound().build();
         }
     }
 }

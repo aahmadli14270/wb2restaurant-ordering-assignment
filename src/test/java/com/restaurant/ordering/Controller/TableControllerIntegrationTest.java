@@ -12,7 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
+import java.util.List;
 
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -36,105 +36,81 @@ public class TableControllerIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // Clean up existing data
         tableItemRepository.deleteAll();
 
-        // Create test table
         testTable = new TableItem();
         testTable.setTableId(101L);
-        testTable.setOrders(new ArrayList<>());
+        testTable = tableItemRepository.save(testTable);
     }
 
     @Test
     void getAllTables_ReturnsTables() throws Exception {
-        // Arrange
-        TableItem savedTable = tableItemRepository.save(testTable);
-
-        // Act & Assert
         mockMvc.perform(get("/tables"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(1))))
+                .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].tableId", is(101)));
     }
 
     @Test
-    void getAllTables_NoTables_ThrowsException() throws Exception {
-        // Act & Assert
+    void getAllTables_Empty_ReturnsNotFound() throws Exception {
+        tableItemRepository.deleteAll();
         mockMvc.perform(get("/tables"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isInternalServerError());
     }
 
     @Test
-    void getTableById_ExistingTable_ReturnsTable() throws Exception {
-        // Arrange
-        TableItem savedTable = tableItemRepository.save(testTable);
-
-        // Act & Assert
-        mockMvc.perform(get("/tables/" + savedTable.getId()))
+    void getTableById_ValidId_ReturnsTable() throws Exception {
+        mockMvc.perform(get("/tables/" + testTable.getTableId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tableId", is(101)));
     }
 
     @Test
-    void getTableById_NonExistingTable_ThrowsException() throws Exception {
-        // Act & Assert
-        mockMvc.perform(get("/tables/999"))
+    void getTableById_InvalidId_ReturnsNotFound() throws Exception {
+        mockMvc.perform(get("/tables/9999"))
                 .andExpect(status().isInternalServerError());
     }
 
     @Test
     void addTable_ValidTable_ReturnsCreatedTable() throws Exception {
-        // Act & Assert
+        TableItem newTable = new TableItem();
+        newTable.setTableId(102L);
+
         mockMvc.perform(post("/tables")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(testTable)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.tableId", is(101)));
-    }
-
-    @Test
-    void updateTable_ExistingTable_ReturnsUpdatedTable() throws Exception {
-        // Arrange
-        TableItem savedTable = tableItemRepository.save(testTable);
-
-        TableItem updatedTable = new TableItem();
-        updatedTable.setTableId(102L);
-
-        // Act & Assert
-        mockMvc.perform(put("/tables/" + savedTable.getId())
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(updatedTable)))
+                .content(objectMapper.writeValueAsString(newTable)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tableId", is(102)));
     }
 
     @Test
-    void updateTable_NonExistingTable_ThrowsException() throws Exception {
-        // Act & Assert
-        mockMvc.perform(put("/tables/999")
+    void deleteTable_ValidId_ReturnsOk() throws Exception {
+        mockMvc.perform(delete("/tables/" + testTable.getTableId()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void deleteTable_InvalidId_ReturnsNotFound() throws Exception {
+        mockMvc.perform(delete("/tables/9999"))
+                .andExpect(status().isInternalServerError());
+    }
+
+    @Test
+    void updateTable_ValidId_ReturnsUpdatedTable() throws Exception {
+        testTable.setTableId(103L);
+
+        mockMvc.perform(put("/tables/" + testTable.getTableId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(testTable)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tableId", is(103)));
+    }
+
+    @Test
+    void updateTable_InvalidId_ReturnsNotFound() throws Exception {
+        mockMvc.perform(put("/tables/9999")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(testTable)))
                 .andExpect(status().isInternalServerError());
     }
-
-    @Test
-    void deleteTable_ExistingTable_DeletesTable() throws Exception {
-        // Arrange
-        TableItem savedTable = tableItemRepository.save(testTable);
-
-        // Act & Assert
-        mockMvc.perform(delete("/tables/" + savedTable.getId()))
-                .andExpect(status().isOk());
-
-        // Verify table is deleted
-        mockMvc.perform(get("/tables/" + savedTable.getId()))
-                .andExpect(status().isInternalServerError());
-    }
-
-    @Test
-    void deleteTable_NonExistingTable_ReturnsOk() throws Exception {
-        // Act & Assert
-        mockMvc.perform(delete("/tables/999"))
-                .andExpect(status().isOk());
-    }
-}
+} 

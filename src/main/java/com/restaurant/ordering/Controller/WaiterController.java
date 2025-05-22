@@ -1,7 +1,10 @@
 package com.restaurant.ordering.Controller;
 
+import com.restaurant.ordering.DTO.OrderDTO;
 import com.restaurant.ordering.Model.Order;
 import com.restaurant.ordering.Service.WaiterService;
+import com.restaurant.ordering.Service.OrderService;
+import com.restaurant.ordering.Enums.OrderStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,15 +18,16 @@ import java.util.NoSuchElementException;
 public class WaiterController {
 
     private final WaiterService waiterService;
+    private final OrderService orderService;
 
     // ✅ Get all orders that are ready to be delivered
     @GetMapping("/ready-orders")
-    public ResponseEntity<List<Order>> getReadyOrders() {
-        List<Order> readyOrders = waiterService.getReadyOrders();
+    public ResponseEntity<List<OrderDTO>> getReadyOrders() {
+        List<OrderDTO> readyOrders = orderService.getOrdersByStatus(OrderStatus.READY);
         if (readyOrders.isEmpty()) {
             throw new NoSuchElementException("There are no ready orders to deliver.");
         }
-        return ResponseEntity.ok(waiterService.getReadyOrders());
+        return ResponseEntity.ok(readyOrders);
     }
 
     // ✅ Mark an order as delivered

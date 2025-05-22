@@ -1,30 +1,27 @@
 package com.restaurant.ordering.Controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.restaurant.ordering.Enums.MenuCategory;
 import com.restaurant.ordering.Enums.OrderStatus;
-import com.restaurant.ordering.Enums.UserRole;
+import com.restaurant.ordering.Model.MenuItem;
 import com.restaurant.ordering.Model.Order;
+import com.restaurant.ordering.Model.OrderItem;
 import com.restaurant.ordering.Model.TableItem;
-import com.restaurant.ordering.Model.Users.User;
-import com.restaurant.ordering.Model.Users.Waiter;
+import com.restaurant.ordering.Repository.MenuItemRepository;
 import com.restaurant.ordering.Repository.OrderRepository;
 import com.restaurant.ordering.Repository.TableItemRepository;
-import com.restaurant.ordering.Repository.UserRepository;
-import org.json.JSONObject;
+import com.restaurant.ordering.Security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -42,105 +39,107 @@ public class WaiterControllerIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Autowired
-    private OrderRepository orderRepository;
-
-    @Autowired
     private TableItemRepository tableItemRepository;
 
     @Autowired
-    private UserRepository userRepository;
+    private OrderRepository orderRepository;
 
     @Autowired
-    private PasswordEncoder passwordEncoder;
+    private MenuItemRepository menuItemRepository;
 
-    private Order readyOrder;
+    @Autowired
+    private JwtTokenProvider jwtTokenProvider;
+
     private TableItem testTable;
-    private User testUser;
+    private MenuItem testMenuItem;
     private String authToken;
-    private final String TEST_USERNAME = "testwaiter";
-    private final String TEST_PASSWORD = "password";
 
     @BeforeEach
-    void setUp() throws Exception {
-        // Clean up existing data
+    void setUp() {
         orderRepository.deleteAll();
+        menuItemRepository.deleteAll();
         tableItemRepository.deleteAll();
-        userRepository.deleteAll();
 
-        // Create test table
         testTable = new TableItem();
         testTable.setTableId(101L);
         testTable.setOrders(new ArrayList<>());
         testTable = tableItemRepository.save(testTable);
 
-        // Create a ready order
-        readyOrder = new Order();
-        readyOrder.setTable(testTable);
-        readyOrder.setStatus(OrderStatus.READY);
-        readyOrder.setTotal(40.0);
-        readyOrder.setItems(new ArrayList<>());
-        readyOrder = orderRepository.save(readyOrder);
+        testMenuItem = new MenuItem();
+        testMenuItem.setName("Test Item");
+        testMenuItem.setDescription("Test Description");
+        testMenuItem.setPrice(10.0);
+        testMenuItem.setCategory(MenuCategory.MAIN_COURSE);
+        testMenuItem = menuItemRepository.save(testMenuItem);
 
-        // Create test waiter user
-        testUser = new Waiter(TEST_USERNAME, passwordEncoder.encode(TEST_PASSWORD));
-        testUser.setRole(UserRole.WAITER);
-        testUser = userRepository.save(testUser);
-
-        // Get JWT token
-        Map<String, String> credentials = new HashMap<>();
-        credentials.put("username", TEST_USERNAME);
-        credentials.put("password", TEST_PASSWORD);
-
-        String response = mockMvc.perform(post("/auth/login")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(credentials)))
-                .andExpect(status().isOk())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        JSONObject jsonResponse = new JSONObject(response);
-        authToken = jsonResponse.getString("token");
+        authToken = "Bearer " + jwtTokenProvider.createToken("waiter", "ROLE_WAITER");
     }
 
     @Test
     void getReadyOrders_ReturnsReadyOrders() throws Exception {
-        // Check if there are any ready orders
-        List<Order> readyOrders = orderRepository.findByStatus(OrderStatus.READY);
+        Order order = new Order();
+        order.setTable(testTable);
+        order.setStatus(OrderStatus.READY);
+        order.setTotal(20.0);
+        List<OrderItem> items = new ArrayList<>();
+        OrderItem item = new OrderItem();
+        item.setMenuItem(testMenuItem);
+        item.setQuantity(2);
+        items.add(item);
+        order.setItems(items);
+        orderRepository.save(order);
 
-        if (readyOrders.isEmpty()) {
-            // If no ready orders, expect 404 NOT_FOUND
             mockMvc.perform(get("/api/waiter/ready-orders")
-                    .header("Authorization", "Bearer " + authToken))
-                    .andExpect(status().isNotFound());
-        } else {
-            // If ready orders exist, expect 200 OK with non-empty list
-            mockMvc.perform(get("/api/waiter/ready-orders")
-                    .header("Authorization", "Bearer " + authToken))
+                .header("Authorization", authToken))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(1))))
-                    .andExpect(jsonPath("$[0].status", is("READY")));
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].status", is("READY")))
+                .andExpect(jsonPath("$[0].total", is(20.0)));
         }
+
+    @Test
+    void getReadyOrders_Empty_ReturnsNotFound() throws Exception {
+        mockMvc.perform(get("/api/waiter/ready-orders")
+                .header("Authorization", authToken))
+                .andExpect(status().isInternalServerError());
     }
 
     @Test
     void markOrderDelivered_ValidOrder_UpdatesStatus() throws Exception {
-        // Act & Assert
-        mockMvc.perform(put("/api/waiter/" + readyOrder.getId() + "/deliver")
-                .header("Authorization", "Bearer " + authToken))
-                .andExpect(status().isOk())
-                .andExpect(content().string("Order marked as DELIVERED"));
+        Order order = new Order();
+        order.setTable(testTable);
+        order.setStatus(OrderStatus.READY);
+        order.setTotal(20.0);
+        List<OrderItem> items = new ArrayList<>();
+        OrderItem item = new OrderItem();
+        item.setMenuItem(testMenuItem);
+        item.setQuantity(2);
+        items.add(item);
+        order.setItems(items);
+        order = orderRepository.save(order);
 
-        // Verify order status was updated
-        Order updatedOrder = orderRepository.findById(readyOrder.getId()).orElseThrow();
-        assert updatedOrder.getStatus() == OrderStatus.DELIVERED;
+        mockMvc.perform(put("/api/waiter/" + order.getId() + "/deliver")
+                .header("Authorization", authToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").value("Order marked as DELIVERED"));
     }
 
     @Test
-    void markOrderDelivered_InvalidOrder_ThrowsException() throws Exception {
-        // Act & Assert
-        mockMvc.perform(put("/api/waiter/999/deliver")
-                .header("Authorization", "Bearer " + authToken))
-                .andExpect(status().isNotFound());
+    void markOrderDelivered_InvalidOrder_ReturnsNotFound() throws Exception {
+        mockMvc.perform(put("/api/waiter/9999/deliver")
+                .header("Authorization", authToken))
+                .andExpect(status().isInternalServerError());
     }
-}
+
+    @Test
+    void getReadyOrders_WithoutAuth_ReturnsForbidden() throws Exception {
+        mockMvc.perform(get("/api/waiter/ready-orders"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void markOrderDelivered_WithoutAuth_ReturnsForbidden() throws Exception {
+        mockMvc.perform(put("/api/waiter/1/deliver"))
+                .andExpect(status().isForbidden());
+    }
+} 

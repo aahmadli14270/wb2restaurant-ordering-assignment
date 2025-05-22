@@ -1,30 +1,27 @@
 package com.restaurant.ordering.Controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.restaurant.ordering.Enums.MenuCategory;
 import com.restaurant.ordering.Enums.OrderStatus;
-import com.restaurant.ordering.Enums.UserRole;
+import com.restaurant.ordering.Model.MenuItem;
 import com.restaurant.ordering.Model.Order;
+import com.restaurant.ordering.Model.OrderItem;
 import com.restaurant.ordering.Model.TableItem;
-import com.restaurant.ordering.Model.Users.KitchenStaff;
-import com.restaurant.ordering.Model.Users.User;
+import com.restaurant.ordering.Repository.MenuItemRepository;
 import com.restaurant.ordering.Repository.OrderRepository;
 import com.restaurant.ordering.Repository.TableItemRepository;
-import com.restaurant.ordering.Repository.UserRepository;
-import org.json.JSONObject;
+import com.restaurant.ordering.Security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -42,177 +39,215 @@ public class KitchenControllerIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Autowired
-    private OrderRepository orderRepository;
-
-    @Autowired
     private TableItemRepository tableItemRepository;
 
     @Autowired
-    private UserRepository userRepository;
+    private OrderRepository orderRepository;
 
     @Autowired
-    private PasswordEncoder passwordEncoder;
+    private MenuItemRepository menuItemRepository;
 
-    private Order createdOrder;
-    private Order inPreparationOrder;
-    private Order readyOrder;
+    @Autowired
+    private JwtTokenProvider jwtTokenProvider;
+
     private TableItem testTable;
-    private User testUser;
+    private MenuItem testMenuItem;
     private String authToken;
-    private final String TEST_USERNAME = "testkitchen";
-    private final String TEST_PASSWORD = "password";
 
     @BeforeEach
-    void setUp() throws Exception {
-        // Clean up existing data
+    void setUp() {
         orderRepository.deleteAll();
+        menuItemRepository.deleteAll();
         tableItemRepository.deleteAll();
-        userRepository.deleteAll();
 
-        // Create test table
         testTable = new TableItem();
         testTable.setTableId(101L);
         testTable.setOrders(new ArrayList<>());
         testTable = tableItemRepository.save(testTable);
 
-        // Create orders with different statuses
-        createdOrder = new Order();
-        createdOrder.setTable(testTable);
-        createdOrder.setStatus(OrderStatus.CREATED);
-        createdOrder.setTotal(20.0);
-        createdOrder.setItems(new ArrayList<>());
-        createdOrder = orderRepository.save(createdOrder);
+        testMenuItem = new MenuItem();
+        testMenuItem.setName("Test Item");
+        testMenuItem.setDescription("Test Description");
+        testMenuItem.setPrice(10.0);
+        testMenuItem.setCategory(MenuCategory.MAIN_COURSE);
+        testMenuItem = menuItemRepository.save(testMenuItem);
 
-        inPreparationOrder = new Order();
-        inPreparationOrder.setTable(testTable);
-        inPreparationOrder.setStatus(OrderStatus.IN_PREPARATION);
-        inPreparationOrder.setTotal(30.0);
-        inPreparationOrder.setItems(new ArrayList<>());
-        inPreparationOrder = orderRepository.save(inPreparationOrder);
-
-        readyOrder = new Order();
-        readyOrder.setTable(testTable);
-        readyOrder.setStatus(OrderStatus.READY);
-        readyOrder.setTotal(40.0);
-        readyOrder.setItems(new ArrayList<>());
-        readyOrder = orderRepository.save(readyOrder);
-
-        // Create test kitchen staff user
-        testUser = new KitchenStaff(TEST_USERNAME, passwordEncoder.encode(TEST_PASSWORD));
-        testUser.setRole(UserRole.KITCHEN);
-        testUser = userRepository.save(testUser);
-
-        // Get JWT token
-        Map<String, String> credentials = new HashMap<>();
-        credentials.put("username", TEST_USERNAME);
-        credentials.put("password", TEST_PASSWORD);
-
-        String response = mockMvc.perform(post("/auth/login")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(credentials)))
-                .andExpect(status().isOk())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        JSONObject jsonResponse = new JSONObject(response);
-        authToken = jsonResponse.getString("token");
+        authToken = "Bearer " + jwtTokenProvider.createToken("kitchen", "ROLE_KITCHEN");
     }
 
     @Test
-    void getIncomingOrders_ReturnsCreatedOrders() throws Exception {
-        // Act & Assert
+    void getIncomingOrders_ReturnsIncomingOrders() throws Exception {
+        Order order = new Order();
+        order.setTable(testTable);
+        order.setStatus(OrderStatus.CREATED);
+        order.setTotal(20.0);
+        List<OrderItem> items = new ArrayList<>();
+        OrderItem item = new OrderItem();
+        item.setMenuItem(testMenuItem);
+        item.setQuantity(2);
+        items.add(item);
+        order.setItems(items);
+        orderRepository.save(order);
+
         mockMvc.perform(get("/api/kitchen/incoming")
-                .header("Authorization", "Bearer " + authToken))
+                .header("Authorization", authToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(1))))
+                .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].status", is("CREATED")))
-                .andExpect(jsonPath("$[0].total", is(20.0)));
+                .andExpect(jsonPath("$[0].totalAmount", is(20.0)));
+    }
+
+    @Test
+    void getIncomingOrders_Empty_ReturnsNotFound() throws Exception {
+        mockMvc.perform(get("/api/kitchen/incoming")
+                .header("Authorization", authToken))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error", is("No incoming orders found.")));
     }
 
     @Test
     void markInPreparation_ValidOrder_UpdatesStatus() throws Exception {
-        // Act & Assert
-        mockMvc.perform(put("/api/kitchen/" + createdOrder.getId() + "/prepare")
-                .header("Authorization", "Bearer " + authToken))
-                .andExpect(status().isOk())
-                .andExpect(content().string("Order marked as IN_PREPARATION"));
+        Order order = new Order();
+        order.setTable(testTable);
+        order.setStatus(OrderStatus.CREATED);
+        order.setTotal(20.0);
+        List<OrderItem> items = new ArrayList<>();
+        OrderItem item = new OrderItem();
+        item.setMenuItem(testMenuItem);
+        item.setQuantity(2);
+        items.add(item);
+        order.setItems(items);
+        order = orderRepository.save(order);
 
-        // Verify order status was updated
-        mockMvc.perform(get("/api/kitchen/preparing")
-                .header("Authorization", "Bearer " + authToken))
+        mockMvc.perform(put("/api/kitchen/" + order.getId() + "/prepare")
+                .header("Authorization", authToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.id == " + createdOrder.getId() + ")].status", contains("IN_PREPARATION")));
+                .andExpect(jsonPath("$").value("Order marked as IN_PREPARATION"));
     }
 
     @Test
-    void markInPreparation_InvalidOrder_ThrowsException() throws Exception {
-        // Act & Assert
-        mockMvc.perform(put("/api/kitchen/999/prepare")
-                .header("Authorization", "Bearer " + authToken))
-                .andExpect(status().isBadRequest());
+    void markInPreparation_InvalidOrder_ReturnsNotFound() throws Exception {
+        mockMvc.perform(put("/api/kitchen/9999/prepare")
+                .header("Authorization", authToken))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error", is("Order with ID 9999 not found.")));
     }
 
     @Test
     void markReady_ValidOrder_UpdatesStatus() throws Exception {
-        // Act & Assert
-        mockMvc.perform(put("/api/kitchen/" + inPreparationOrder.getId() + "/ready")
-                .header("Authorization", "Bearer " + authToken))
-                .andExpect(status().isOk())
-                .andExpect(content().string("Order marked as READY"));
+        Order order = new Order();
+        order.setTable(testTable);
+        order.setStatus(OrderStatus.IN_PREPARATION);
+        order.setTotal(20.0);
+        List<OrderItem> items = new ArrayList<>();
+        OrderItem item = new OrderItem();
+        item.setMenuItem(testMenuItem);
+        item.setQuantity(2);
+        items.add(item);
+        order.setItems(items);
+        order = orderRepository.save(order);
 
-        // Verify order status was updated
-        mockMvc.perform(get("/api/kitchen/ready")
-                .header("Authorization", "Bearer " + authToken))
+        mockMvc.perform(put("/api/kitchen/" + order.getId() + "/ready")
+                .header("Authorization", authToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.id == " + inPreparationOrder.getId() + ")].status", contains("READY")));
+                .andExpect(jsonPath("$").value("Order marked as READY"));
     }
 
     @Test
-    void markReady_InvalidOrder_ThrowsException() throws Exception {
-        // Act & Assert
-        mockMvc.perform(put("/api/kitchen/999/ready")
-                .header("Authorization", "Bearer " + authToken))
-                .andExpect(status().isBadRequest());
+    void markReady_InvalidOrder_ReturnsNotFound() throws Exception {
+        mockMvc.perform(put("/api/kitchen/9999/ready")
+                .header("Authorization", authToken))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error", is("Order with ID 9999 not found.")));
     }
 
     @Test
     void getOrdersInPreparation_ReturnsInPreparationOrders() throws Exception {
-        // Check if there are any orders in preparation
-        List<Order> inPreparationOrders = orderRepository.findByStatus(OrderStatus.IN_PREPARATION);
+        Order order = new Order();
+        order.setTable(testTable);
+        order.setStatus(OrderStatus.IN_PREPARATION);
+        order.setTotal(20.0);
+        List<OrderItem> items = new ArrayList<>();
+        OrderItem item = new OrderItem();
+        item.setMenuItem(testMenuItem);
+        item.setQuantity(2);
+        items.add(item);
+        order.setItems(items);
+        orderRepository.save(order);
 
-        if (inPreparationOrders.isEmpty()) {
-            // If no orders in preparation, expect 404 NOT_FOUND
             mockMvc.perform(get("/api/kitchen/preparing")
-                    .header("Authorization", "Bearer " + authToken))
-                    .andExpect(status().isNotFound());
-        } else {
-            // If orders in preparation exist, expect 200 OK with non-empty list
-            mockMvc.perform(get("/api/kitchen/preparing")
-                    .header("Authorization", "Bearer " + authToken))
+                .header("Authorization", authToken))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(1))))
-                    .andExpect(jsonPath("$[0].status", is("IN_PREPARATION")));
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].status", is("IN_PREPARATION")))
+                .andExpect(jsonPath("$[0].totalAmount", is(20.0)));
         }
+
+    @Test
+    void getOrdersInPreparation_Empty_ReturnsNotFound() throws Exception {
+        mockMvc.perform(get("/api/kitchen/preparing")
+                .header("Authorization", authToken))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error", is("No orders currently in preparation.")));
     }
 
     @Test
     void getReadyOrders_ReturnsReadyOrders() throws Exception {
-        // Check if there are any ready orders
-        List<Order> readyOrders = orderRepository.findByStatus(OrderStatus.READY);
+        Order order = new Order();
+        order.setTable(testTable);
+        order.setStatus(OrderStatus.READY);
+        order.setTotal(20.0);
+        List<OrderItem> items = new ArrayList<>();
+        OrderItem item = new OrderItem();
+        item.setMenuItem(testMenuItem);
+        item.setQuantity(2);
+        items.add(item);
+        order.setItems(items);
+        orderRepository.save(order);
 
-        if (readyOrders.isEmpty()) {
-            // If no ready orders, expect 404 NOT_FOUND
             mockMvc.perform(get("/api/kitchen/ready")
-                    .header("Authorization", "Bearer " + authToken))
-                    .andExpect(status().isNotFound());
-        } else {
-            // If ready orders exist, expect 200 OK with non-empty list
-            mockMvc.perform(get("/api/kitchen/ready")
-                    .header("Authorization", "Bearer " + authToken))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(1))))
-                    .andExpect(jsonPath("$[0].status", is("READY")));
-        }
+                .header("Authorization", authToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].status", is("READY")))
+                .andExpect(jsonPath("$[0].totalAmount", is(20.0)));
     }
-}
+
+    @Test
+    void getReadyOrders_Empty_ReturnsNotFound() throws Exception {
+            mockMvc.perform(get("/api/kitchen/ready")
+                .header("Authorization", authToken))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error", is("No orders are currently ready.")));
+    }
+
+    @Test
+    void getIncomingOrders_WithoutAuth_ReturnsForbidden() throws Exception {
+        mockMvc.perform(get("/api/kitchen/incoming"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void markInPreparation_WithoutAuth_ReturnsForbidden() throws Exception {
+        mockMvc.perform(put("/api/kitchen/1/prepare"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void markReady_WithoutAuth_ReturnsForbidden() throws Exception {
+        mockMvc.perform(put("/api/kitchen/1/ready"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getOrdersInPreparation_WithoutAuth_ReturnsForbidden() throws Exception {
+        mockMvc.perform(get("/api/kitchen/preparing"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getReadyOrders_WithoutAuth_ReturnsForbidden() throws Exception {
+        mockMvc.perform(get("/api/kitchen/ready"))
+                .andExpect(status().isForbidden());
+        }
+} 

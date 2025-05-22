@@ -1,9 +1,10 @@
 package com.restaurant.ordering.Repository;
 
-
 import com.restaurant.ordering.Model.Order;
 import com.restaurant.ordering.Enums.OrderStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -26,4 +27,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     List<Order> findByCreatedAtAfter(LocalDateTime createdAt);
 
     List<Order> findByTableId(Long tableId);
+
+    // Find order by ID with items eagerly fetched
+    @Query("SELECT o FROM Order o LEFT JOIN FETCH o.items WHERE o.id = :id")
+    Optional<Order> findByIdWithItems(@Param("id") Long id);
 }

@@ -12,9 +12,9 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/orders")
 public class OrderController {
-    
+
     private final OrderService orderService;
-    
+
     public OrderController(OrderService orderService) {
         this.orderService = orderService;
     }
@@ -24,7 +24,7 @@ public class OrderController {
     public ResponseEntity<OrderDTO> createOrder(@RequestBody CreateOrderDTO orderDTO) {
         return ResponseEntity.ok(orderService.createOrder(orderDTO));
     }
-    
+
     @PutMapping("/{orderId}/items")
     @PreAuthorize("hasRole('WAITER')")
     public ResponseEntity<OrderDTO> updateOrderItems(
@@ -40,7 +40,7 @@ public class OrderController {
             @PathVariable Long itemId) {
         return ResponseEntity.ok(orderService.removeItemFromOrder(orderId, itemId));
     }
-    
+
     @PutMapping("/{orderId}/status")
     @PreAuthorize("hasAnyRole('KITCHEN', 'WAITER')")
     public ResponseEntity<OrderDTO> updateOrderStatus(
@@ -48,13 +48,13 @@ public class OrderController {
             @RequestParam OrderStatus status) {
         return ResponseEntity.ok(orderService.updateOrderStatus(orderId, status));
     }
-    
+
     @GetMapping("/{orderId}")
     @PreAuthorize("hasAnyRole('KITCHEN', 'WAITER')")
     public ResponseEntity<OrderDTO> getOrder(@PathVariable Long orderId) {
         return ResponseEntity.ok(orderService.getOrder(orderId));
     }
-    
+
     @GetMapping("/table/{tableId}")
     @PreAuthorize("hasAnyRole('KITCHEN', 'WAITER')")
     public ResponseEntity<OrderDTO> getOrderByTable(@PathVariable Long tableId) {

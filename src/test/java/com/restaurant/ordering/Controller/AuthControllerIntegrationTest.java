@@ -67,7 +67,9 @@ public class AuthControllerIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(credentials)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token", notNullValue()));
+                .andExpect(jsonPath("$.token", notNullValue()))
+                .andExpect(jsonPath("$.username", is(TEST_USERNAME)))
+                .andExpect(jsonPath("$.role", is("ROLE_KITCHEN")));
     }
 
     @Test

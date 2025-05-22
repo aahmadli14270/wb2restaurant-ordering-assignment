@@ -1,4 +1,4 @@
-package com.restaurant.ordering.Service;
+package com.restaurant.ordering.ServiceImpl;
 
 import com.restaurant.ordering.Config.RabbitMQConfig;
 import com.restaurant.ordering.DTO.OrderDTO;

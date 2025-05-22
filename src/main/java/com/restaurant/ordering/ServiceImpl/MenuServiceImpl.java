@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @Service
 public class MenuServiceImpl implements MenuService {
@@ -26,12 +27,18 @@ public class MenuServiceImpl implements MenuService {
 
     @Override
     public MenuItem updateMenuItem(Long id, MenuItem item) {
+        if (!menuItemRepository.existsById(id)) {
+            throw new NoSuchElementException("Menu item with id " + id + " not found");
+        }
         item.setId(id);
         return menuItemRepository.save(item);
     }
 
     @Override
     public void deleteMenuItem(Long id) {
+        if (!menuItemRepository.existsById(id)) {
+            throw new NoSuchElementException("Menu item with id " + id + " not found");
+        }
         menuItemRepository.deleteById(id);
     }
 }

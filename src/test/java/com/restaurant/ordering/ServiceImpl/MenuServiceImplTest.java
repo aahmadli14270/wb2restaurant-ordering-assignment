@@ -11,6 +11,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -85,6 +87,7 @@ public class MenuServiceImplTest {
         expectedItem.setPrice(15.0);
         expectedItem.setCategory(MenuCategory.DESSERT);
 
+        when(menuItemRepository.existsById(1L)).thenReturn(true);
         when(menuItemRepository.save(any(MenuItem.class))).thenReturn(expectedItem);
 
         // Act
@@ -100,8 +103,22 @@ public class MenuServiceImplTest {
     }
 
     @Test
+    void updateMenuItem_InvalidId_ThrowsNoSuchElementException() {
+        // Arrange
+        MenuItem updatedItem = new MenuItem();
+        when(menuItemRepository.existsById(999L)).thenReturn(false);
+
+        // Act & Assert
+        assertThrows(NoSuchElementException.class, () -> {
+            menuService.updateMenuItem(999L, updatedItem);
+        });
+        verify(menuItemRepository, never()).save(any(MenuItem.class));
+    }
+
+    @Test
     void deleteMenuItem_ValidId_DeletesItem() {
         // Arrange
+        when(menuItemRepository.existsById(1L)).thenReturn(true);
         doNothing().when(menuItemRepository).deleteById(1L);
 
         // Act
@@ -109,5 +126,17 @@ public class MenuServiceImplTest {
 
         // Assert
         verify(menuItemRepository, times(1)).deleteById(1L);
+    }
+
+    @Test
+    void deleteMenuItem_InvalidId_ThrowsNoSuchElementException() {
+        // Arrange
+        when(menuItemRepository.existsById(999L)).thenReturn(false);
+
+        // Act & Assert
+        assertThrows(NoSuchElementException.class, () -> {
+            menuService.deleteMenuItem(999L);
+        });
+        verify(menuItemRepository, never()).deleteById(any());
     }
 }
